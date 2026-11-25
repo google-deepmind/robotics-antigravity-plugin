@@ -273,16 +273,61 @@ def discover_sidecar_notify_url(
   return ''
 
 
-def post_json(url: str, payload: dict[str, Any], timeout: float = 1.0) -> bool:
+def discover_sidecar_notify_token(
+    explicit_url: str = '', *, isolated_session: bool = False
+) -> str:
+  """Returns the per-process notify token published by the sidecar.
+
+  Mirrors `discover_sidecar_notify_url`: the token lives in the same sidecar
+  info files. An explicit notify URL or an isolated session has no token
+  file, so this returns '' and the sidecar falls back to the legacy
+  (no-Origin, no-token) path.
+  """
+
+  if explicit_url or isolated_session:
+    return ''
+
+  best_token = ''
+  best_started_at = -1.0
+
+  for info_path in candidate_sidecar_info_paths():
+    if not _safe_is_file(info_path):
+      continue
+
+    try:
+      data = json.loads(info_path.read_text(encoding='utf-8'))
+      token = str(data.get('notify_token', '') or '')
+      started_at = float(
+          data.get('started_at', 0) or info_path.stat().st_mtime
+      )
+
+      if token and started_at >= best_started_at:
+        best_started_at = started_at
+        best_token = token
+    except Exception:  # pylint: disable=broad-exception-caught
+      continue
+
+  return best_token
+
+
+def post_json(
+    url: str,
+    payload: dict[str, Any],
+    timeout: float = 1.0,
+    headers: dict[str, str] | None = None,
+) -> bool:
   """Sends a best-effort JSON POST request and returns True on HTTP 2xx."""
   if not url:
     return False
   try:
     body = json.dumps(payload).encode('utf-8')
+    all_headers = {'Content-Type': 'application/json'}
+    if headers:
+      all_headers.update(headers)
     req = urllib.request.Request(
         url,
         data=body,
-        headers={'Content-Type': 'application/json'},
+        headers=all_headers,
         method='POST',
     )
     parsed = urllib.parse.urlparse(url)

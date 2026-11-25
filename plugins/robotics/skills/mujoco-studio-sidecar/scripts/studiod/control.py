@@ -41,12 +41,25 @@ def start_control_server(
       body = json.dumps(payload, indent=2).encode('utf-8')
       self.send_response(status_code)
       self.send_header('Content-Type', 'application/json')
-      self.send_header('Access-Control-Allow-Origin', '*')
-      self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-      self.send_header('Access-Control-Allow-Headers', 'Content-Type')
       self.send_header('Content-Length', str(len(body)))
       self.end_headers()
       self.wfile.write(body)
+
+    def _reject_browser_origin(self) -> bool:
+      """Rejects browser-originated requests.
+
+      This API is only ever called by the local agent and by the Node
+      sidecar (which strips `Origin` when proxying, see
+      `proxyHttpToPort` in `sidecars/mujoco_studio/main.mjs`). Browsers
+      always send an `Origin` header on cross-origin requests, so any
+      request carrying one is a website talking directly to the loopback
+      port — e.g. after a localhost port scan — and must not be able to
+      shut down or reload the simulation.
+      """
+      if 'Origin' in self.headers:
+        self._send_json(403, {'error': 'Browser-origin requests rejected'})
+        return True
+      return False
 
     def _read_json_body(self) -> dict[str, Any]:
       length = int(self.headers.get('Content-Length', '0') or '0')
@@ -63,6 +76,9 @@ def start_control_server(
 
     def do_GET(self) -> None:  # pylint: disable=invalid-name
       """Serves `/_studio/status` and `/_studio/context` GET endpoints."""
+      if self._reject_browser_origin():
+        return
+
       parsed = urllib.parse.urlparse(self.path)
       if parsed.path in ('/_studio/status', '/status'):
         status = daemon_state.get_status()
@@ -92,6 +108,9 @@ def start_control_server(
 
     def do_POST(self) -> None:  # pylint: disable=invalid-name
       """Handles capture, reload, and shutdown POST endpoints."""
+      if self._reject_browser_origin():
+        return
+
       parsed = urllib.parse.urlparse(self.path)
       body = self._read_json_body()
       handle = handle_ref[0]

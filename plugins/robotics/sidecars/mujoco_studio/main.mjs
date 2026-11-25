@@ -1347,6 +1347,46 @@ function verifySidecarAuth(req, expectedToken) {
 }
 
 /**
+ * Checks whether an incoming POST /_studio/notify carries acceptable
+ * credentials. Previously notify was exempt from auth entirely, so any
+ * loopback caller — including a website that discovered the ephemeral
+ * sidecar port via localhost scanning — could overwrite the daemon session
+ * state (http_port / control_port) and hijack the sidecar's proxy targets
+ * or kill the session with `session_stopped`.
+ *
+ * studiod.py (urllib) sends no Origin header, while browsers always send
+ * one on cross-origin POSTs, so browser-originated notifies are rejected
+ * outright. A per-process token (published in the sidecar info file that
+ * studiod already reads for the notify URL) is required whenever the
+ * caller presents one, and is always sent by current studiod. Legacy
+ * studiod (no Origin, no token) keeps working.
+ *
+ * @param {!http.IncomingMessage} req
+ * @param {string} notifyToken
+ * @return {boolean}
+ */
+function verifyNotifyAuth(req, notifyToken) {
+  if (req.headers.origin) {
+    return false;
+  }
+
+  const presented = req.headers['x-studio-notify-token'];
+  if (!presented) {
+    return true;
+  }
+
+  const expectedDigest = crypto
+    .createHash('sha256')
+    .update(notifyToken, 'utf-8')
+    .digest();
+  const actualDigest = crypto
+    .createHash('sha256')
+    .update(String(presented), 'utf-8')
+    .digest();
+  return crypto.timingSafeEqual(actualDigest, expectedDigest);
+}
+
+/**
  * Reads JSON body from an HTTP request.
  * @param {!http.IncomingMessage} req
  * @return {!Promise<!Object>}
@@ -1441,6 +1481,11 @@ function sendJson(res, statusCode, payload) {
  */
 export async function startStudioSidecarServer(options = {}) {
   const expectedToken = resolveExpectedSidecarToken(options);
+  // Per-process token for POST /_studio/notify, published in the sidecar
+  // info file (see below) so studiod.py can present it. Any other loopback
+  // caller — including a website that found the port — does not know it.
+  const notifyToken = crypto.randomBytes(32).toString('hex');
+
   /** @type {!Map<string, function(): void>} tunnel key -> teardown */
   const wsTunnels = new Map();
   /** @type {!Map<string, !Object>} session id -> HTTP-tunneled WS session */
@@ -1884,6 +1929,10 @@ export async function startStudioSidecarServer(options = {}) {
 
     const outHeaders = { ...req.headers, host: `127.0.0.1:${targetPort}` };
     delete outHeaders['accept-encoding'];
+    // The studiod control API rejects requests bearing an Origin header
+    // (browser-originated). Strip it here so the sidecar's own proxied
+    // calls to the control port keep working.
+    delete outHeaders['origin'];
 
     const reqToken = extractRequestToken(req);
 
@@ -2285,8 +2334,11 @@ export async function startStudioSidecarServer(options = {}) {
     const qIndex = rawUrl.indexOf('?');
     const pathname = qIndex === -1 ? rawUrl : rawUrl.slice(0, qIndex);
 
-    // Allow unauthenticated local POST /_studio/notify from studiod.py on loopback.
-    if (pathname !== '/_studio/notify' && !verifySidecarAuth(req, expectedToken)) {
+    if (
+      pathname === '/_studio/notify'
+        ? !verifyNotifyAuth(req, notifyToken)
+        : !verifySidecarAuth(req, expectedToken)
+    ) {
       res.writeHead(403, { 'Content-Type': 'text/plain' });
       res.end('Forbidden: invalid or missing sidecar token');
       return;
@@ -2416,6 +2468,7 @@ export async function startStudioSidecarServer(options = {}) {
     {
       web_port: actualPort,
       pid: process.pid,
+      notify_token: notifyToken,
       started_at: Date.now(),
     },
     null,
@@ -2424,7 +2477,12 @@ export async function startStudioSidecarServer(options = {}) {
   for (const sidecarInfoPath of getSidecarInfoPaths(options)) {
     try {
       fs.mkdirSync(path.dirname(sidecarInfoPath), { recursive: true });
-      fs.writeFileSync(sidecarInfoPath, sidecarInfoPayload, 'utf-8');
+      // Owner-only: the file now carries the notify token and the sidecar
+      // port; other local users have no business reading either.
+      fs.writeFileSync(sidecarInfoPath, sidecarInfoPayload, {
+        encoding: 'utf-8',
+        mode: 0o600,
+      });
     } catch (_) {}
   }
 

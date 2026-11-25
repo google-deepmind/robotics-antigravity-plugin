@@ -168,7 +168,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     }
     if extra:
       payload.update(extra)
-    discovery.post_json(notify_url, payload, timeout=0.5)
+    notify_token = discovery.discover_sidecar_notify_token(
+        opts.sidecar_notify_url, isolated_session=bool(opts.session_file)
+    )
+    notify_headers = (
+        {'X-Studio-Notify-Token': notify_token} if notify_token else None
+    )
+    discovery.post_json(
+        notify_url, payload, timeout=0.5, headers=notify_headers
+    )
 
   runtime_dir = state.default_runtime_dir(workspace_dir, opts.runtime_dir)
   daemon_state = state.DaemonState(
