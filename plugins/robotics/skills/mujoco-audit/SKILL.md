@@ -230,7 +230,8 @@ multi-material, or compliant/elastomeric objects:
     `plugged_cavity_deficit_mm_tol` (`8.0`), `plugged_through_holes_tol` (`3`),
     `grasp_lift_slip_mm_tol` (`25.0`), `grasp_shake_slip_mm_tol` (`20.0`),
     `ledge_overhang_diff_pct_tol` (`25.0`), `high_speed_drop_scale` (`6.0`),
-    `thin_slab_min_dim_ratio` (`0.20`), `bounce_ratio_tol` (`0.35`).
+    `thin_slab_min_dim_ratio` (`0.20`), `bounce_ratio_tol` (`0.35`),
+    `max_plausible_density_g_cm3` (`22.6`).
 *   **Never game `--thresholds_json` to mask collider defects**: Only adjust
     thresholds when justified by the real object's scale, material compliance,
     or multi-material composition. Never raise `plugged_through_holes_tol` or
@@ -517,6 +518,9 @@ checked by `audit_scenarios.validate_static_and_mesh_hygiene(xml_path)`):
 *   **`eff_hull_density_g_cm3`** (`g/cm³`): `total_mass_g / total_hull_vol_cm3`.
     Compare against water (`1.0 g/cm³`): hollow containers `0.05–0.4`,
     plastics/woods `0.5–1.4`, metals `2.0–8.0`.
+    Above `max_plausible_density_g_cm3` (`22.6`, denser than osmium) the run
+    prints `WARNING:` and fills `asset_info.asset_warnings`, which usually
+    means a kg-vs-g unit error or a runaway mass override.
 *   **`hull_density_cv`** (dimensionless): Coefficient of variation ($\sigma /
     \mu$) of per-hull densities (`INFO`). Should be `≈ 0` within a single
     homogeneous material, and naturally `> 0.15` across multi-material or

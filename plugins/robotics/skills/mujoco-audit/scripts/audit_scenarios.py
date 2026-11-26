@@ -203,6 +203,9 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "high_speed_drop_scale": 6.0,
     "thin_slab_min_dim_ratio": 0.20,
     "bounce_ratio_tol": 0.35,
+    # Densest known material (osmium) is ~22.6 g/cm^3; a higher effective
+    # hull density almost always means a unit error (kg vs g) or a runaway mass.
+    "max_plausible_density_g_cm3": 22.6,
 }
 
 AGENT_DISCLAIMER = (
@@ -3700,6 +3703,16 @@ def run_all_scenarios_for_asset(
 
   total_hull_vol_cm3 = float(sum(hull_vols_cm3)) if hull_vols_cm3 else 1.0
   eff_density = total_mass_g / total_hull_vol_cm3
+  asset_warnings: list[str] = []
+  max_density = active_thresholds["max_plausible_density_g_cm3"]
+  if eff_density > max_density:
+    asset_warnings.append(
+        f"Implausible effective density {eff_density:.1f} g/cm3 (total mass"
+        f" {total_mass_g:.1f} g over {total_hull_vol_cm3:.1f} cm3 of collision"
+        f" hulls) exceeds {max_density:g} g/cm3, denser than any known"
+        " material. Check mass/density units (kg vs g) and per-geom mass"
+        " overrides."
+    )
   hull_density_cv = (
       float(np.std(hull_densities) / np.mean(hull_densities))
       if len(hull_densities) >= 2 and np.mean(hull_densities) > 0
@@ -3737,6 +3750,7 @@ def run_all_scenarios_for_asset(
       "total_mass_g": round(total_mass_g, 3),
       "total_hull_vol_cm3": round(total_hull_vol_cm3, 2),
       "eff_hull_density_g_cm3": round(eff_density, 4),
+      "asset_warnings": asset_warnings,
       "hull_density_cv": round(hull_density_cv, 4),
       "com_local_m": [round(float(x), 4) for x in com_world],
       "com_z_above_floor_m": round(com_z_above_floor_m, 4),
@@ -3953,6 +3967,8 @@ def run_all_scenarios_for_asset(
       f" {base_info['vis_span_cm']} cm  |  Col Geoms:"
       f" {base_info['n_col_geoms']}"
   )
+  if base_info.get("asset_warnings"):
+    header_txt += "  |  WARNING: implausible density"
   draw.text((14, 8), header_txt, fill=(255, 255, 255), font=f_title)
   draw.text(
       (14, 34),
@@ -4276,6 +4292,8 @@ def main(argv: Sequence[str]) -> None:
       scenarios=_SCENARIOS.value,
   )
   print("Saved:", res["contact_sheet_png"], res["scorecard_json"])
+  for w in res["asset_info"].get("asset_warnings", []):
+    print("WARNING:", w)
   if _BEFORE_XML.value:
     cmp_out = _COMPARISON_OUT.value or os.path.join(
         out_dir, f"{(_LABEL.value or 'asset')}_before_vs_after.png"

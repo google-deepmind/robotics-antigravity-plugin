@@ -1,0 +1,11 @@
+WARNING Wed Nov 25 16:27:58 2026: Attach conflict when attaching 'yam_v0' to 'scenario_audit_scene', policy is 'warning'
+integrator: parent has 0 (default), child has 3, keeping parent value
+
+WARNING Wed Nov 25 16:28:04 2026: Attach conflict when attaching 'aloha' to 'scenario_audit_scene', policy is 'warning'
+impratio: parent has 1 (default), child has 10, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Wed Nov 25 16:28:04 2026: Attach conflict when attaching 'aloha' to 'scenario_audit_scene', policy is 'warning'
+impratio: parent has 1 (default), child has 10, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+
