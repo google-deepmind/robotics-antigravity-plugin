@@ -28,7 +28,7 @@ materials), consult [`rules/mujoco_asset_standards.md`][asset-standards].
 > [!IMPORTANT]
 >
 > **Protect Your Context Window**:
-> * Read **only this `mujoco-audit/SKILL.md` upfront** (`1` `read_file` call). Do **NOT** read all of [`rules/mujoco_asset_standards.md`][asset-standards] upfront—first run `audit_scenarios.py` (§2) and consult [`rules/mujoco_asset_standards.md`][asset-standards] **only on demand** for the specific section(s) that fail.
+> * Read **only this `mujoco-audit/SKILL.md` upfront** (`1` file read). Do **NOT** read all of [`rules/mujoco_asset_standards.md`][asset-standards] upfront—first run `audit_scenarios.py` (§2) and consult [`rules/mujoco_asset_standards.md`][asset-standards] **only on demand** for the specific section(s) that fail.
 > * Do **NOT** read the `.py` implementation source of [`scripts/audit_scenarios.py`](scripts/audit_scenarios.py) or [`../mujoco-showcase-shot/scripts/render_showcase_shot.py`](../mujoco-showcase-shot/scripts/render_showcase_shot.py)—all CLI flags and Python return schemas are documented below.
 
 --------------------------------------------------------------------------------
@@ -54,14 +54,17 @@ Target(s) & optional notes:
 
 1.  **If you are the top-level / parent conversation**:
 
-    *   Spawn a `self` subagent (`Model: "inherit"`) via `invoke_subagent` to
+    *   If your harness supports subagents, spawn a `self` subagent (for
+        example `invoke_subagent` with `Model: "inherit"` in Antigravity) to
         execute this skill on the target asset(s), passing all user-specified
         knobs (`Action`, `Depth`, `Articulations`, `Passive Mechanism Variant`,
-        and `Known Issues / Custom Focus`), your
-        `Parent Conversation ID: <parent_conv_id>`, and instructing the subagent
-        to read this `mujoco-audit/SKILL.md` first (consulting
-        [`rules/mujoco_asset_standards.md`][asset-standards] only on demand if a check
-        fails).
+        and `Known Issues / Custom Focus`), your parent conversation ID if the
+        harness provides one (`Parent Conversation ID: <parent_conv_id>`), and
+        instructing the subagent to read this `mujoco-audit/SKILL.md` first
+        (consulting [`rules/mujoco_asset_standards.md`][asset-standards] only on
+        demand if a check fails).
+    *   **If your harness has no subagents**, skip the spawn and follow rule 2
+        yourself in this conversation.
     *   **When the subagent finishes**: Present the remediated asset path (or
         triage verdict), a concise summary of the findings/fixes, and the
         verification renders/videos to the user.
@@ -73,6 +76,8 @@ Target(s) & optional notes:
         directly.
     *   **Scratch Hygiene**: Place all temporary scripts and intermediate files
         in `<ArtifactDir>/scratch/` (never inside the repository working tree).
+        `<ArtifactDir>` means any output directory outside the repository
+        working tree; use your harness's artifact directory if it has one.
 
 --------------------------------------------------------------------------------
 
@@ -702,8 +707,9 @@ When asked to **remediate / fix** an asset (not just detect):
         Collision Hulls (`group="3"`, distinct per-hull colors + `3/4`
         Overlay)**, and **(Row 3) After Collision Hulls (`group="3"`, distinct
         per-hull colors + `3/4` Overlay)**. Always visually inspect the output
-        PNG with `read_file` to confirm zero camera cropping and zero visual
-        mesh protrusion!
+        PNG (open it with your harness's image-capable file reader, e.g.
+        `read_file`) to confirm zero camera cropping and zero visual mesh
+        protrusion!
     *   **Optional 360° Filament PBR Turntable Video (`showcase_shot`)**: When
         running an in-depth audit/remediation or new asset showcase (and not
         skipped by Fast/Rigid-Only prompts), run
